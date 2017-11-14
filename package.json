@@ -1,0 +1,15 @@
+{
+  "name": "vpn",
+  "version": "0.0.1",
+  "scripts": {
+    "start": "nodemon --watch cn -x node cn/index.js",
+    "pac": "nodemon --watch pac -x node pac/index.js",
+    "en": "nodemon --watch en -x node en/index.js"
+  },
+  "dependencies": {
+    "express": "^4.16.2"
+  },
+  "devDependencies": {
+    "nodemon": "^1.12.1"
+  }
+}
