@@ -92,43 +92,6 @@ function setKeyAndLength(buf, key) {
 	], buf.length + packageConfig.packageSize + packageConfig.keySize + packageConfig.keyLength);
 }
 
-const _ = (function factoryMergePackage() {
-	let _package = Buffer.alloc(0);
-	return (buf) => {
-		let vernier = 0;//游标
-		buf = Buffer.concat([_package, buf], buf.length + _package.length);
-		let packageLength = parseInt(buf.slice(vernier, vernier += packageConfig.packageSize).toString()); //加密数据长度
-		let packageSize = packageLength + packageConfig.packageSize + packageConfig.keySize + packageConfig.keyLength;//包的大小
-		if (packageSize > buf.length && (_package = buf)) return;
-		let keyLength = parseInt(buf.slice(vernier, vernier += packageConfig.keyLength).toString());//密钥长度
-		let key = buf.slice(vernier, vernier + keyLength).toString();//密钥
-		vernier += packageConfig.keySize;
-		let data = buf.slice(vernier, vernier += packageLength);
-		packageSize = packageSize - _package.length;
-		_package = Buffer.alloc(0);
-		let _return = {
-			length: keyLength,
-			key: key,
-			data: data,
-			packageSize: packageSize
-		};
-
-		return _return;
-	}
-})();
-
-function getKeyAndLength(buf) {
-	let dataList = [], _bufObj, vernier = 0, bufLength = buf.length, count = 0;
-	while (vernier < bufLength && (++count) < 10) {
-		_bufObj = _(buf.slice(vernier));
-		if (_bufObj) {
-			vernier += _bufObj.packageSize;
-			dataList.push(_bufObj);
-		} else vernier = bufLength;
-	}
-	return dataList;
-}
-
 function mergeConfig(_config) {
 	return Object.assign({
 		clearEncoding: 'utf8',
@@ -146,11 +109,50 @@ function initEncryption(aseEjb) {
 	}));
 	if (aseEjb.si) clearTimeout(aseEjb.si);
 	aseEjb.si = setTimeout(() => initEncryption(aseEjb), KEY_RESET /** 60 */ * 1000);
+	aseEjb.encryption = undefined;
 	aseEjb.encryption = _encryption;
 }
 
 function initDecryption(aseEjb) {
+	const _ = (function factoryMergePackage() {
+		let _package = Buffer.alloc(0);
+		return (buf) => {
+			let vernier = 0;//游标
+			buf = Buffer.concat([_package, buf], buf.length + _package.length);
+			let packageLength = parseInt(buf.slice(vernier, vernier += packageConfig.packageSize).toString()); //加密数据长度
+			let packageSize = packageLength + packageConfig.packageSize + packageConfig.keySize + packageConfig.keyLength;//包的大小
+			if (packageSize > buf.length && (_package = buf)) return;
+			let keyLength = parseInt(buf.slice(vernier, vernier += packageConfig.keyLength).toString());//密钥长度
+			let key = buf.slice(vernier, vernier + keyLength).toString();//密钥
+			vernier += packageConfig.keySize;
+			let data = buf.slice(vernier, vernier += packageLength);
+			packageSize = packageSize - _package.length;
+			_package = Buffer.alloc(0);
+			let _return = {
+				length: keyLength,
+				key: key,
+				data: data,
+				packageSize: packageSize
+			};
+
+			return _return;
+		}
+	})();
+
+	function getKeyAndLength(buf) {
+		let dataList = [], _bufObj, vernier = 0, bufLength = buf.length, count = 0;
+		while (vernier < bufLength && (++count) < 10) {
+			_bufObj = _(buf.slice(vernier));
+			if (_bufObj) {
+				vernier += _bufObj.packageSize;
+				dataList.push(_bufObj);
+			} else vernier = bufLength;
+		}
+		return dataList;
+	}
+
 	let _decryption;
+	aseEjb.decryption = undefined;
 	aseEjb.decryption = (buf) => {
 		let packageList = getKeyAndLength(buf);
 		let bufList = packageList.map((item) => {

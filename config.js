@@ -6,9 +6,9 @@ module.exports = exports = {
 	PAC_PORT: process.env.en_port || 6787,
 
 	UDP_EN_ADDRESS:'127.0.0.1',
-	UDP_EN_PORT:41234,
+	UDP_EN_PORT:6788,
 	UDP_CN_ADDRESS:'127.0.0.1',
-	UDP_CN_PORT:41233,
+	UDP_CN_PORT:6789,
 
 	KEY_RESET:10,
 
