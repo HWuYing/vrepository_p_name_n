@@ -16,10 +16,7 @@ let serverMiddleware = factoryTcpServer(CN_PORT);
 
 let udpServer = udpAdapter(factoryUdp(UDP_CN_PORT));
 
-
-serverMiddleware.connection.register('connection', (socket, next) => {
-	next(socketAdapter(socket));
-});
+serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket)));
 
 function udpAdapter(udp) {
 	udp.send.register('before', (_, next) => {
@@ -32,8 +29,8 @@ function udpAdapter(udp) {
 
 	udp.message.register('message', (_) => {
 		let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
-		// console.log(`============udpMessage ${hash} ${count}===================`);
-		// console.log(data.length);
+		console.log(`============udpMessage ${hash} ${count}===================`);
+		console.log(data.length);
 		packageMap.write(hash, count, data);
 	});
 	return udp;

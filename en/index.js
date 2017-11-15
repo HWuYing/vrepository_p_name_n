@@ -110,8 +110,8 @@ function clientAdapter(client, socket, msg) {
 	});
 
 	client.data.register('data', (_) => {
-		// console.log(`===========data ${msg.hash} ${dataCount}=================`);
-		// console.log(_.length);
+		console.log(`===========data ${msg.hash} ${dataCount}=================`);
+		console.log(_.length);
 		udpServer(UdpUtil.warpPackage(msg.hash, dataCount++, _));
 	});
 
