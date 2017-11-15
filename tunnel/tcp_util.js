@@ -1,16 +1,17 @@
-const createAseEjb = require('./../aes_ejb');
 const config = require('./../config');
 const eventBufLen = config.eventBufLen;
 
 const UdpUtil = require('./udp_util');
-
 const packageManage = require('./../utils').packageManage;
-const writeBuf = packageManage.writeBuf;
-const bufSlice = packageManage.bufSlice;
-
-const aesEjbTcp = createAseEjb();
 
 class TcpUtil {
+
+
+	/**
+	 * tcp传输事件解包
+	 * @param data
+	 * @param next
+	 */
 	static decomEventPackage(data, next) {
 		packageManage.splitMergePackage(data).map(_ => {
 			next(Object.assign({}, {
@@ -19,6 +20,11 @@ class TcpUtil {
 		});
 	}
 
+	/**
+	 * tcp传输事件打包
+	 * @param data
+	 * @param next
+	 */
 	static warpEventPackage(event, hash, count, data) {
 		let _event = Buffer.alloc(eventBufLen, '');
 		_event.write(event);
