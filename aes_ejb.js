@@ -1,13 +1,17 @@
 const crypto = require('crypto');
+const util = require('./utils');
 const {KEY_RESET, splitPackageSize} = require('./config');
 const packageConfig = {
 	keyLength: 4,
 	keySize: 64,
 	packageSize: 8,
 	maxPageSize: splitPackageSize,
+	titleBaoWenLength: 80,
 };
 
-let getSerialNumber = (() => {
+const {writeBuf, bufSlice} = util.packageManage;
+
+const getSerialNumber = (() => {
 	const serialList = [];
 	for (let i = 0; i < 100; i++) serialList.push(i % 10);
 	return (serialLength) => {
@@ -17,7 +21,7 @@ let getSerialNumber = (() => {
 	};
 })();
 
-let getPassword = (() => {
+const getPassword = (() => {
 	const keyList = (() => {
 		let key = '', i;
 		let fromCharCode = String.fromCharCode;
@@ -27,6 +31,62 @@ let getPassword = (() => {
 		return key;
 	})();
 	return (serialNumber) => serialNumber.split('').map((number, index) => keyList[(parseInt(number) + index * 64) % keyList.length]).join('');
+})();
+
+const titleBaoWen = (() => {
+	const length = 32;
+	const {packageSize, keyLength, keySize, titleBaoWenLength} = packageConfig;
+	const titleLength = packageSize + keySize + keyLength;
+	const config = mergeConfig({
+		passwordLength: length,
+		serialNumber: '01234567890123456789012345678901',
+		algorithm: `aes-${length * 8}-ecb`
+	});
+	const password = getPassword(config.serialNumber);
+	const {algorithm, iv} = config;
+
+	function baoWenEncryption(_data) {
+		let cipher = crypto.createCipheriv(algorithm, password, iv);
+		let _1 = cipher.update(_data);
+		let _2 = cipher.final();
+		return Buffer.concat([_1, _2], _1.length + _2.length);
+	}
+
+	function baoWenDecryption(data) {
+		let decipher = crypto.createDecipheriv(algorithm, password, iv);
+		let _1 = decipher.update(data);
+		let _2 = decipher.final();
+		return Buffer.concat([_1, _2], _1.length + _2.length);
+	}
+
+	function warpTitle(buf, key) {
+		let _writeBuf = writeBuf(titleLength);
+		_writeBuf(buf.length, packageSize); //写入数据字节长度
+		_writeBuf(key.length, keyLength); //写入序列号的长度
+		_writeBuf(key, keySize); //写入序列号
+		let d_buf = baoWenEncryption(_writeBuf.buf);
+		return [d_buf, titleBaoWenLength];
+	}
+
+	function decomTitle(buf) {
+		let titleBaoWenSlice = bufSlice(baoWenDecryption(buf.slice(0, titleBaoWenLength)));
+		let _packageSize = parseInt(titleBaoWenSlice(packageSize).toString());
+		let _keyLength = parseInt(titleBaoWenSlice(keyLength).toString());
+		let key = titleBaoWenSlice(_keyLength).toString();
+		let data = buf.slice(titleBaoWenLength, titleBaoWenLength + _packageSize);
+		return {
+			packageLength: _packageSize,
+			keyLength: _keyLength,
+			titleBaoWenLength,
+			key,
+			data
+		};
+	}
+
+	return {
+		warpTitle,
+		decomTitle
+	}
 })();
 
 /**
@@ -78,18 +138,8 @@ function factoryDecryption(key, config) {
 }
 
 function setKeyAndLength(buf, key) {
-	let packageSize = Buffer.alloc(packageConfig.packageSize, '');
-	let packageKey = Buffer.alloc(packageConfig.keySize, '');
-	let keyLength = Buffer.alloc(packageConfig.keyLength, '');
-	packageSize.write(buf.length.toString());
-	packageKey.write(key);
-	keyLength.write(key.length.toString());
-	return Buffer.concat([
-		packageSize,
-		keyLength,
-		packageKey,
-		buf,
-	], buf.length + packageConfig.packageSize + packageConfig.keySize + packageConfig.keyLength);
+	let [_buf, _len] = titleBaoWen.warpTitle(buf, key);
+	return Buffer.concat([_buf, buf,], buf.length + _len);
 }
 
 function mergeConfig(_config) {
@@ -117,15 +167,10 @@ function initDecryption(aseEjb) {
 	const _ = (function factoryMergePackage() {
 		let _package = Buffer.alloc(0);
 		return (buf) => {
-			let vernier = 0;//游标
 			buf = Buffer.concat([_package, buf], buf.length + _package.length);
-			let packageLength = parseInt(buf.slice(vernier, vernier += packageConfig.packageSize).toString()); //加密数据长度
-			let packageSize = packageLength + packageConfig.packageSize + packageConfig.keySize + packageConfig.keyLength;//包的大小
+			let {packageLength, keyLength, key, data, titleBaoWenLength} = titleBaoWen.decomTitle(buf);
+			let packageSize = packageLength + titleBaoWenLength;//包的大小
 			if (packageSize > buf.length && (_package = buf)) return;
-			let keyLength = parseInt(buf.slice(vernier, vernier += packageConfig.keyLength).toString());//密钥长度
-			let key = buf.slice(vernier, vernier + keyLength).toString();//密钥
-			vernier += packageConfig.keySize;
-			let data = buf.slice(vernier, vernier += packageLength);
 			packageSize = packageSize - _package.length;
 			_package = Buffer.alloc(0);
 			let _return = {
@@ -134,7 +179,6 @@ function initDecryption(aseEjb) {
 				data: data,
 				packageSize: packageSize
 			};
-
 			return _return;
 		}
 	})();
