@@ -22,7 +22,7 @@ module.exports = exports = function (port) {
 	const _socketMiddleware = socketMiddleware(udp_socket);
 	udp_socket.on('listening', () => {
 		const address = udp_socket.address();
-		console.log(`服务器监听 ${address.address}:${address.port}`);
+		console.log(`UDP服务器监听 ${address.address}:${address.port}`);
 	});
 
 	_socketMiddleware.send.register('send' , (_, next) =>{

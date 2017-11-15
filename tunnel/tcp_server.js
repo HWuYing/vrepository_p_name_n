@@ -26,7 +26,7 @@ module.exports = exports = function (port) {
 
 	server.listen(port, function () {
 		const address = server.address();
-		console.log(`tcp服务器监听 ${address.address}:${address.port}`);
+		console.log(`TCP服务器监听 ${address.address}:${address.port}`);
 	});
 
 	return _serverMiddleware;

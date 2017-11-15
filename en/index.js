@@ -1,7 +1,10 @@
 const {EN_PORT, countBufLen, UDP_CN_PORT, UDP_CN_ADDRESS, UDP_EN_PORT} = require('../config');
 const parsetDns = require('./../dns');
 const {getHttpLine, isHttpHead} = require('./../utils');
-const aseEjb = require('./../aes_ejb')();
+
+const createAseEjb = require('./../aes_ejb');
+const aesEjbUdp = createAseEjb();
+const aesEjbTcp = createAseEjb();
 
 const factoryTcpServer = require('./../tunnel/tcp_server');
 const factoryTcpClient = require('./../tunnel/tcp_client');
@@ -24,15 +27,15 @@ serverMiddleware.connection.register('connection', (socket, next) => {
 
 function udpAdapter(udp) {
 	udp.send.register('before', (_, next) => next({
-		msg: aseEjb.encryption(_),
+		msg: aesEjbUdp.encryption(_),
 		port: UDP_CN_PORT,
 		address: UDP_CN_ADDRESS
 	}));
 
 	udp.message.register('message', (_) => {
-		let {hash, count, data} = clientMap.decomPackage(aseEjb.decryption(_.msg));
+		let {hash, count, data} = clientMap.decomPackage(aesEjbUdp.decryption(_.msg));
 		// console.log(`============udpMessage ${hash} ${count}===================`);
-		// console.log(data.length);
+		// console.log(data.toString());
 		clientMap.write(hash, count, data);
 	});
 
@@ -41,7 +44,7 @@ function udpAdapter(udp) {
 
 function socketAdapter(socket) {
 	socket.data.register('before', (_, next) => {
-		clientMap.decomEventPackage(aseEjb.decryption(_), next);
+		clientMap.decomEventPackage(aesEjbUdp.decryption(_), next);
 	});
 	socket.data.register('data', (_, next) => {
 		let event = _.event;
@@ -75,7 +78,7 @@ function socketAdapter(socket) {
 		});
 	});
 
-	socket.write.register('before', (_, next) => next(aseEjb.encryption(_)));
+	socket.write.register('before', (_, next) => next(aesEjbUdp.encryption(_)));
 }
 
 /**
