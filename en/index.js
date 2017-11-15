@@ -9,10 +9,12 @@ const aesEjbTcp = createAseEjb();
 const factoryTcpServer = require('./../tunnel/tcp_server');
 const factoryTcpClient = require('./../tunnel/tcp_client');
 const factoryUdp = require('./../tunnel/udp');
-const udpUtil = require('./../tunnel/udp_util');
+
+const UdpUtil = require('./../tunnel/udp_util');
+const TcpUtil = require('./../tunnel/tcp_util');
 
 
-const clientMap = new udpUtil();
+const clientMap = new UdpUtil();
 
 let udpServer = udpAdapter(factoryUdp(UDP_EN_PORT));
 
@@ -33,7 +35,7 @@ function udpAdapter(udp) {
 	}));
 
 	udp.message.register('message', (_) => {
-		let {hash, count, data} = udpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
+		let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
 		// console.log(`============udpMessage ${hash} ${count}===================`);
 		// console.log(data.toString());
 		clientMap.write(hash, count, data);
@@ -44,7 +46,7 @@ function udpAdapter(udp) {
 
 function socketAdapter(socket) {
 	socket.data.register('before', (_, next) => {
-		clientMap.decomEventPackage(aesEjbUdp.decryption(_), next);
+		TcpUtil.decomEventPackage(aesEjbTcp.decryption(_), next);
 	});
 	socket.data.register('data', (_, next) => {
 		let event = _.event;
@@ -74,11 +76,11 @@ function socketAdapter(socket) {
 		}).catch(e => {
 			console.log(e);
 			console.log(ym[0]);
-			socket.write(clientMap.warpEventPackage('error', _.hash, _.count));
+			socket.write(TcpUtil.warpEventPackage('error', _.hash, _.count));
 		});
 	});
 
-	socket.write.register('before', (_, next) => next(aesEjbUdp.encryption(_)));
+	socket.write.register('before', (_, next) => next(aesEjbTcp.encryption(_)));
 }
 
 /**
@@ -104,26 +106,26 @@ function clientAdapter(client, socket, msg) {
 	client.data.register('before', (_, next) => {
 		// console.log(`==============server ${msg.hash} send message=====================`);
 		// console.log(_.length);
-		udpUtil.splitPackage(_, next);
+		UdpUtil.splitPackage(_, next);
 	});
 
 	client.data.register('data', (_) => {
 		// console.log(`===========data ${msg.hash} ${dataCount}=================`);
 		// console.log(_.length);
-		udpServer(udpUtil.warpPackage(msg.hash, dataCount++, _));
+		udpServer(UdpUtil.warpPackage(msg.hash, dataCount++, _));
 	});
 
 	client.connect.register('connect', () => {
 		// console.log(`=============server ${msg.hash} connect==================`);
 		clientMap.add(msg.hash.toString(), client);
-		socket.write(clientMap.warpEventPackage('connect', msg.hash, msg.count));
+		socket.write(TcpUtil.warpEventPackage('connect', msg.hash, msg.count));
 	});
 	client.error.register('error', (e) => {
 		console.log(`====================server ${dataCount} error===============`);
 		console.log(msg.hash);
 		console.log(e.message);
 		clientMap.error(msg.hash.toString());
-		socket.write(clientMap.warpEventPackage('error', msg.hash, msg.count));
+		socket.write(TcpUtil.warpEventPackage('error', msg.hash, msg.count));
 	});
 	client.end.register('end', (_msg) => {
 		// console.log(`===============server ${msg.hash} end==============`);
@@ -132,7 +134,7 @@ function clientAdapter(client, socket, msg) {
 		client.ended = true;
 		let _datacount = Buffer.alloc(countBufLen, '');
 		_datacount.write(dataCount.toString().slice(-countBufLen));
-		socket.write(clientMap.warpEventPackage('end', msg.hash, dataCount,
+		socket.write(TcpUtil.warpEventPackage('end', msg.hash, dataCount,
 			_datacount));
 	})
 

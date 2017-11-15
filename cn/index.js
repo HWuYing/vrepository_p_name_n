@@ -5,9 +5,10 @@ const {isHttpHead, getHttpLine} = require('./../utils');
 const factoryTcpServer = require('./../tunnel/tcp_server');
 const factoryTcpClient = require('./../tunnel/tcp_client');
 const factoryUdp = require('./../tunnel/udp');
-const udpUtil = require('./../tunnel/udp_util');
+const UdpUtil = require('./../tunnel/udp_util');
+const TcpUtil = require('./../tunnel/tcp_util');
 
-const packageMap = new udpUtil();
+const packageMap = new UdpUtil();
 const aesEjbUdp = createAseEjb();
 const aesEjbTcp = createAseEjb();
 
@@ -30,7 +31,7 @@ function udpAdapter(udp) {
 	});
 
 	udp.message.register('message', (_) => {
-		let {hash, count, data} = udpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
+		let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
 		// console.log(`============udpMessage ${hash} ${count}===================`);
 		// console.log(data.length);
 		packageMap.write(hash, count, data);
@@ -55,7 +56,7 @@ function socketAdapter(socket) {
 		if (count == 0 && isHttpHead(_)) {
 			httpObj = getHttpLine()(_);
 			clientMiddleware({
-				data: udpUtil.warpPackage(
+				data: UdpUtil.warpPackage(
 					hash, count,
 					Buffer.from(`${httpObj.headline[2]}:${httpObj.headline[3] || 80}`)
 				), event: 'createConnect'
@@ -72,7 +73,7 @@ function socketAdapter(socket) {
 	socket.end.register('end', () => {
 		// console.log(`===============client ${hash} end==============`);
 		// console.log(count);
-		clientMiddleware({data: udpUtil.warpPackage(hash, count), event: 'end'});
+		clientMiddleware({data: UdpUtil.warpPackage(hash, count), event: 'end'});
 		packageMap.end(hash, count);
 	});
 
@@ -80,7 +81,7 @@ function socketAdapter(socket) {
 		console.log(`====================client ${count} error===============`);
 		console.log(hash);
 		console.log(e.message);
-		clientMiddleware({data: udpUtil.warpPackage(hash, count), event: 'error'});
+		clientMiddleware({data: UdpUtil.warpPackage(hash, count), event: 'error'});
 		packageMap.end(hash, count);
 	});
 
@@ -92,7 +93,7 @@ function clientAdapter(client) {
 	client.connect.register('connect', () => connectStatus = true);
 
 	client.write.register('before', (_, next) => {
-		next(aesEjbUdp.encryption(packageMap.warpEventPackage(_.event, _.data)));
+		next(aesEjbTcp.encryption(TcpUtil.warpEventPackage(_.event, _.data)));
 	});
 
 	client.writeUdp.register('before', (_, next) => {
@@ -100,10 +101,10 @@ function clientAdapter(client) {
 		// console.log(`===========data ${hash} ${count}=================`);
 		// console.log(data.length);
 		// console.log(count);
-		udpUtil.splitPackage(data, (__) => next({
+		UdpUtil.splitPackage(data, (__) => next({
 			count: _.count,
 			hash: hash,
-			buf: udpUtil.warpPackage(hash, _.count++, __),
+			buf: UdpUtil.warpPackage(hash, _.count++, __),
 		}));
 	});
 	client.writeUdp.register('writeUdp', (_) => {
@@ -113,7 +114,7 @@ function clientAdapter(client) {
 	});
 
 	client.data.register('before', (_, next) => {
-		packageMap.decomEventPackage(aesEjbUdp.decryption(_), next);
+		TcpUtil.decomEventPackage(aesEjbTcp.decryption(_), next);
 	});
 
 	client.data.register('data', (_) => {
