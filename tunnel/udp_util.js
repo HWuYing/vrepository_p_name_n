@@ -1,4 +1,4 @@
-const aseEjb = require('./../aes_ejb')();
+const createAseEjb = require('./../aes_ejb');
 const config = require('./../config');
 const splitPackageSize = config.splitPackageSize - 500;
 const packageMaxDisparity = config.packageMaxDisparity;
@@ -9,6 +9,7 @@ const eventBufLen = config.eventBufLen;
 const splitBufPackageSize = config.splitBufPackageSize;
 const packageManage = require('./../utils').packageManage;
 
+const aesEjbUdp = createAseEjb();
 const writeBuf = packageManage.writeBuf;
 const bufSlice = packageManage.bufSlice;
 
@@ -31,8 +32,8 @@ class UdpUtil {
 		return map[key];
 	}
 
-	splitPackage(_, next) {
-		let splitList = aseEjb.encryption(_, splitPackageSize);
+	static splitPackage(_, next) {
+		let splitList = aesEjbUdp.encryption(_, splitPackageSize);
 		let write = writeBuf([splitBufPackageSize, packageSize]);
 		write(splitList.length, splitBufPackageSize);
 		write(_.length, packageSize);
@@ -44,22 +45,22 @@ class UdpUtil {
 		return splitList.length;
 	}
 
-	getSplitPackageParam(_) {
+	static getSplitPackageParam(_) {
 		let slice = bufSlice(_);
 		let splitLength = parseInt(slice(splitBufPackageSize).toString());
 		let pageSize = parseInt(slice(packageSize).toString());
 		let index = parseInt(slice(4).toString());
-		let data = aseEjb.decryption(_.slice(splitBufPackageSize + packageSize + 4));
+		let data = aesEjbUdp.decryption(_.slice(splitBufPackageSize + packageSize + 4));
 		return {splitLength, index, pageSize, data};
 	}
 
-	mergePackage(_) {
-		let {splitLength, index, pageSize, data} = this.getSplitPackageParam(_);
+	static mergePackage(_) {
+		let {splitLength, index, pageSize, data} = UdpUtil.getSplitPackageParam(_);
 		let mergeList = new Array(splitLength);
 		mergeList[index] = data;
 		if (pageSize == data.length) return data;
 		return (__) => {
-			let _data = this.getSplitPackageParam(__);
+			let _data = UdpUtil.getSplitPackageParam(__);
 			if (_data.index == splitLength - 1) {
 				if (!_data.data) {
 					console.log(`==========mergePackage index:${index} splitLength:${splitPackageSize}================`);
@@ -90,7 +91,12 @@ class UdpUtil {
 		// console.log(this.get(key).writePackageList);
 	}
 
-	decomPackage(data) {
+	/**
+	 * 数据解包 udp
+	 * @param data
+	 * @returns {{hash, count: Number, data: (Array.<T>|string|Blob|ArrayBuffer|*)}}
+	 */
+	static decomPackage(data) {
 		let slice = bufSlice(data);
 		let hash = slice(hashBufLen).toString();
 		let count = parseInt(slice(countBufLen).toString());
@@ -98,7 +104,14 @@ class UdpUtil {
 		return {hash, count, data};
 	}
 
-	warpPackage(hash, count, data) {
+	/**
+	 * 数据打包 udp
+	 * @param hash
+	 * @param count
+	 * @param data
+	 * @returns {Array.<T>|string|*}
+	 */
+	static warpPackage(hash, count, data) {
 		let write = writeBuf([countBufLen, hashBufLen]);
 		write(hash, hashBufLen);
 		write(count || 0, countBufLen);
@@ -112,7 +125,7 @@ class UdpUtil {
 		packageManage.splitMergePackage(data).map(_ => {
 			next(Object.assign({}, {
 				event: _.slice(0, eventBufLen).toString()
-			}, this.decomPackage(_.slice(eventBufLen))))
+			}, UdpUtil.decomPackage(_.slice(eventBufLen))))
 		});
 	}
 
@@ -120,7 +133,7 @@ class UdpUtil {
 		let _event = Buffer.alloc(eventBufLen, '');
 		_event.write(event);
 		if (Buffer.isBuffer(hash)) data = hash;
-		else data = this.warpPackage(hash, count, data);
+		else data = UdpUtil.warpPackage(hash, count, data);
 		return packageManage.addPackageSizeTitle(Buffer.concat([_event, data], eventBufLen + data.length));
 	}
 
@@ -140,7 +153,7 @@ class UdpUtil {
 		let nextData;
 		let merge;
 		if (obj.writeVernier == count) {
-			if (!obj.merge) merge = obj.merge = this.mergePackage(data);
+			if (!obj.merge) merge = obj.merge = UdpUtil.mergePackage(data);
 			else merge = obj.merge(data);
 			if (Buffer.isBuffer(merge)) {
 				// console.log(`=================merge ${key} ${count}==============`);
@@ -158,7 +171,7 @@ class UdpUtil {
 			} catch (e) {
 				console.log(`${e}`);
 			}
-			if (nextData = obj.writePackageList[++count]) this.write(key, count, nextData);
+			if (nextData = obj.writePackageList[++count] && nextData) this.write(key, count, nextData);
 		} else this.writePushPackage(key, count, data);
 		if (obj.writeVernier + packageMaxDisparity < count && obj.judgeDiscardPackage) {
 			obj.judgeDiscardPackage = this.createJudgeDiscardPackage(obj.writeVernier, obj);
@@ -167,7 +180,7 @@ class UdpUtil {
 
 	createFirstWritUdp(key, buf, udpServer) {
 		let _cache = [], count = 0;
-		let splitLength = this.splitPackage(buf, _ => _cache.push(this.warpPackage(key, count++, _)));
+		let splitLength = UdpUtil.splitPackage(buf, _ => _cache.push(UdpUtil.warpPackage(key, count++, _)));
 		this.get(key).firstWritUdp = () => _cache.map(_ => udpServer(_));
 		return splitLength;
 	}
@@ -199,6 +212,4 @@ class UdpUtil {
 }
 
 
-module.exports = exports = function () {
-	return new UdpUtil();
-};
+module.exports = exports = UdpUtil;

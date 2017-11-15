@@ -12,7 +12,7 @@ const factoryUdp = require('./../tunnel/udp');
 const udpUtil = require('./../tunnel/udp_util');
 
 
-const clientMap = udpUtil();
+const clientMap = new udpUtil();
 
 let udpServer = udpAdapter(factoryUdp(UDP_EN_PORT));
 
@@ -33,7 +33,7 @@ function udpAdapter(udp) {
 	}));
 
 	udp.message.register('message', (_) => {
-		let {hash, count, data} = clientMap.decomPackage(aesEjbUdp.decryption(_.msg));
+		let {hash, count, data} = udpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
 		// console.log(`============udpMessage ${hash} ${count}===================`);
 		// console.log(data.toString());
 		clientMap.write(hash, count, data);
@@ -104,13 +104,13 @@ function clientAdapter(client, socket, msg) {
 	client.data.register('before', (_, next) => {
 		// console.log(`==============server ${msg.hash} send message=====================`);
 		// console.log(_.length);
-		clientMap.splitPackage(_, next);
+		udpUtil.splitPackage(_, next);
 	});
 
 	client.data.register('data', (_) => {
 		// console.log(`===========data ${msg.hash} ${dataCount}=================`);
 		// console.log(_.length);
-		udpServer(clientMap.warpPackage(msg.hash, dataCount++, _));
+		udpServer(udpUtil.warpPackage(msg.hash, dataCount++, _));
 	});
 
 	client.connect.register('connect', () => {

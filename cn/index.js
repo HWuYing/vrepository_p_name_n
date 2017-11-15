@@ -1,7 +1,5 @@
 const {CN_PORT, EN_PORT, EN_ADDRESS, UDP_CN_PORT, UDP_EN_ADDRESS, UDP_EN_PORT} = require('../config');
 const createAseEjb = require('./../aes_ejb');
-const aesEjbUdp = createAseEjb();
-const aesEjbTcp = createAseEjb();
 const {isHttpHead, getHttpLine} = require('./../utils');
 
 const factoryTcpServer = require('./../tunnel/tcp_server');
@@ -9,7 +7,9 @@ const factoryTcpClient = require('./../tunnel/tcp_client');
 const factoryUdp = require('./../tunnel/udp');
 const udpUtil = require('./../tunnel/udp_util');
 
-const packageMap = udpUtil();
+const packageMap = new udpUtil();
+const aesEjbUdp = createAseEjb();
+const aesEjbTcp = createAseEjb();
 
 let serverMiddleware = factoryTcpServer(CN_PORT);
 
@@ -30,9 +30,9 @@ function udpAdapter(udp) {
 	});
 
 	udp.message.register('message', (_) => {
-		let {hash, count, data} = packageMap.decomPackage(aesEjbUdp.decryption(_.msg));
-		console.log(`============udpMessage ${hash} ${count}===================`);
-		console.log(data.length);
+		let {hash, count, data} = udpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
+		// console.log(`============udpMessage ${hash} ${count}===================`);
+		// console.log(data.length);
 		packageMap.write(hash, count, data);
 	});
 	return udp;
@@ -55,7 +55,7 @@ function socketAdapter(socket) {
 		if (count == 0 && isHttpHead(_)) {
 			httpObj = getHttpLine()(_);
 			clientMiddleware({
-				data: packageMap.warpPackage(
+				data: udpUtil.warpPackage(
 					hash, count,
 					Buffer.from(`${httpObj.headline[2]}:${httpObj.headline[3] || 80}`)
 				), event: 'createConnect'
@@ -72,7 +72,7 @@ function socketAdapter(socket) {
 	socket.end.register('end', () => {
 		// console.log(`===============client ${hash} end==============`);
 		// console.log(count);
-		clientMiddleware({data: packageMap.warpPackage(hash, count), event: 'end'});
+		clientMiddleware({data: udpUtil.warpPackage(hash, count), event: 'end'});
 		packageMap.end(hash, count);
 	});
 
@@ -80,7 +80,7 @@ function socketAdapter(socket) {
 		console.log(`====================client ${count} error===============`);
 		console.log(hash);
 		console.log(e.message);
-		clientMiddleware({data: packageMap.warpPackage(hash, count), event: 'error'});
+		clientMiddleware({data: udpUtil.warpPackage(hash, count), event: 'error'});
 		packageMap.end(hash, count);
 	});
 
@@ -100,10 +100,10 @@ function clientAdapter(client) {
 		// console.log(`===========data ${hash} ${count}=================`);
 		// console.log(data.length);
 		// console.log(count);
-		packageMap.splitPackage(data, (__) => next({
+		udpUtil.splitPackage(data, (__) => next({
 			count: _.count,
 			hash: hash,
-			buf: packageMap.warpPackage(hash, _.count++, __),
+			buf: udpUtil.warpPackage(hash, _.count++, __),
 		}));
 	});
 	client.writeUdp.register('writeUdp', (_) => {
