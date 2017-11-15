@@ -37,7 +37,7 @@ function udpAdapter(udp) {
 	udp.message.register('message', (_) => {
 		let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
 		// console.log(`============udpMessage ${hash} ${count}===================`);
-		// console.log(data.toString());
+		// console.log(data.length);
 		clientMap.write(hash, count, data);
 	});
 
@@ -91,6 +91,7 @@ function socketAdapter(socket) {
 function clientAdapter(client, socket, msg) {
 	let dataCount = 0;
 	client.write.register('before', (_, next) => {
+		// console.log(`===========data ${msg.hash} =================`);
 		let httpObj;
 		if (isHttpHead(_)) {
 			httpObj = getHttpLine()(_);
@@ -100,7 +101,9 @@ function clientAdapter(client, socket, msg) {
 				next(httpObj.buf);
 			}
 		}
-		else next(_);
+		else {
+			next(_);
+		}
 	});
 
 	client.data.register('before', (_, next) => {
@@ -110,8 +113,8 @@ function clientAdapter(client, socket, msg) {
 	});
 
 	client.data.register('data', (_) => {
-		console.log(`===========data ${msg.hash} ${dataCount}=================`);
-		console.log(_.length);
+		// console.log(`===========data ${msg.hash} ${dataCount}=================`);
+		// console.log(_.length);
 		udpServer(UdpUtil.warpPackage(msg.hash, dataCount++, _));
 	});
 

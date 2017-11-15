@@ -29,8 +29,8 @@ function udpAdapter(udp) {
 
 	udp.message.register('message', (_) => {
 		let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
-		console.log(`============udpMessage ${hash} ${count}===================`);
-		console.log(data.length);
+		// console.log(`============udpMessage ${hash} ${count}===================`);
+		// console.log(data.length);
 		packageMap.write(hash, count, data);
 	});
 	return udp;
@@ -97,7 +97,6 @@ function clientAdapter(client) {
 		let {data, hash, count} = _;
 		// console.log(`===========data ${hash} ${count}=================`);
 		// console.log(data.length);
-		// console.log(count);
 		UdpUtil.splitPackage(data, (__) => next({
 			count: _.count,
 			hash: hash,
