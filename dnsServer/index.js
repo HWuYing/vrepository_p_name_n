@@ -177,8 +177,6 @@ function _parseFromBuffer(buf) {
 
 	info = factoryReadPackage(buf,readAnswerPackage)(offset, arcount);
 	body.additionalRecords = info.data;
-	offset = info.next;
-
 	return query;
 }
 
