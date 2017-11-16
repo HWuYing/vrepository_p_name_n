@@ -69,33 +69,83 @@ const structure = {
 };
 
 
-function readDomainName(buf, offset) { //{{{
-	var length, ret = [],
-		next = false;
+function readAnswerPackage(buf, offset) { //{{{
+	var ttl, len, rdata;
 
-	while ((length = buf.readUInt8(offset++)) > 0) {
-		if ((length & 0xC0) == 0xC0) {
-			if (next === false) {
-				next = offset + 1;
-			}
-			offset = ((length & (~0xC0)) << 8) | buf.readUInt8(offset);
-			continue;
-		}
-		ret.push(buf.toString('ascii', offset, offset + length));
-		offset += length;
-	}
-	//debug("------", ret.join("."), "-----");
+	ttl = buf.readUInt32BE(offset);
+	offset += 4;
+	len = buf.readUInt16BE(offset);
+	offset += 2;
+	rdata = buf.toString('base64', offset, offset + len);
+	offset += len;
 	return {
-		name: ret.join("."),
-		next: (next === false ? offset : next)
+		data: {
+			ttl: ttl,
+			rdata: rdata
+		},
+		next: offset
 	};
 }
+
+function factoryReadPackage(buf, callback) {
+	function readDomainName(offset) {
+		var length, ret = [],
+			next = false;
+
+		while ((length = buf.readUInt8(offset++)) > 0) {
+			if ((length & 0xC0) == 0xC0) {
+				if (next === false) {
+					next = offset + 1;
+				}
+				offset = ((length & (~0xC0)) << 8) | buf.readUInt8(offset);
+				continue;
+			}
+			ret.push(buf.toString('ascii', offset, offset + length));
+			offset += length;
+		}
+		return {
+			name: ret.join("."),
+			next: (next === false ? offset : next)
+		};
+	}
+
+	return (offset, count) => {
+		let info, _info, data = [], type, klass;
+		while (count--) {
+			info = readDomainName(offset);
+			offset = info.next;
+
+			type = buf.readUInt16BE(offset);
+			offset += 2;
+
+			klass = buf.readUInt16BE(offset);
+			offset += 2;
+			info = {
+				name:info.name,
+				type:type,
+				klass:klass
+			};
+			if (callback && typeof callback == 'function') {
+				_info = callback(buf, offset);
+				info = Object.assign(info, _info.data);
+				offset = _info.next;
+			}
+			data.push(info);
+		}
+		return {
+			data: data,
+			next: offset
+		}
+	}
+}
+
 
 function _parseFromBuffer(buf) {
 	const query = {};
 	const header = query.header = {};
-	const question = query.question = {};
+	const body = query.body = {};
 	let qdcount, ancount, nscount, arcount;
+	let offset, info;
 	header.id = buf.readUInt16BE(0);
 	header.flags = buf.readUInt16BE(2);
 	header.qr = ((0x08 << 12) & header.flags) >> 12;
@@ -110,13 +160,24 @@ function _parseFromBuffer(buf) {
 	ancount = buf.readUInt16BE(6);
 	nscount = buf.readUInt16BE(8);
 	arcount = buf.readUInt16BE(10);
-	console.log(readDomainName(buf,12));
-	console.log(buf.readUInt8(12));
 
-	console.log('qdcount', qdcount);
-	console.log('ancount', ancount);
-	console.log('nscount', nscount);
-	console.log('arcount', arcount);
+	offset = 12;
+
+	info = factoryReadPackage(buf)(offset, qdcount);
+	body.queries = info.data;
+	offset = info.next;
+
+	info = factoryReadPackage(buf,readAnswerPackage)(offset, ancount);
+	body.answers = info.data;
+	offset = info.next;
+
+	info = factoryReadPackage(buf,readAnswerPackage)(offset, nscount);
+	body.authoritativeNameservers = info.data;
+	offset = info.next;
+
+	info = factoryReadPackage(buf,readAnswerPackage)(offset, arcount);
+	body.additionalRecords = info.data;
+	offset = info.next;
 
 	return query;
 }
