@@ -2,6 +2,7 @@ const {CN_PORT, EN_PORT, EN_ADDRESS, UDP_CN_PORT, UDP_EN_ADDRESS, UDP_EN_PORT} =
 const createAseEjb = require('./../aes_ejb');
 const {isHttpHead, getHttpLine} = require('./../utils');
 
+const factoryDnsServer = require('./../dnsServer');
 const factoryTcpServer = require('./../tunnel/tcp_server');
 const factoryTcpClient = require('./../tunnel/tcp_client');
 const factoryUdp = require('./../tunnel/udp');
@@ -12,8 +13,8 @@ const packageMap = new UdpUtil();
 const aesEjbUdp = createAseEjb();
 const aesEjbTcp = createAseEjb();
 
+let dnsServer = factoryDnsServer();
 let serverMiddleware = factoryTcpServer(CN_PORT);
-
 let udpServer = udpAdapter(factoryUdp(UDP_CN_PORT));
 
 serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket)));
