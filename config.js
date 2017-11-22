@@ -1,6 +1,7 @@
 module.exports = exports = {
 	CN_ADDRESS:'127.0.0.1',
-	CN_PORT: process.env.cn_port || 6789,
+	CN_PORT: process.env.cn_port || 443,
+	// CN_PORT: process.env.cn_port || 6789,
 	EN_ADDRESS:'127.0.0.1',
 	EN_PORT: process.env.en_port || 6788,
 	PAC_PORT: process.env.en_port || 6787,

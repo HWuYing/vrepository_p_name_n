@@ -111,8 +111,13 @@ function getHttpLine() {
 			`([A-Z]+)\\s+${method === 'CONNECT' ? '' : 'http:\\/\\/'}([^:|^\\/]+):*([^\\/^\\s]*)([^\\?]*)(\\?*[^\\s]*)\\s*(HTTP\\/\\d+.\\d+)`
 		);
 		_httpLine = httpHeaderList[0].match(_httpLine);
+		console.log(_msg);
 		if (_httpLine) httpHeaderList[0] = `${_httpLine[1]} ${_httpLine[4]}${_httpLine[5]} ${_httpLine[6]}`.replace(/\s{2,}/g, ' ');
-		else _httpLine = [httpHeaderList[0], httpHeaderList[0].split(' ')[0]];
+		else _httpLine = [
+			httpHeaderList[0],
+			httpHeaderList[0].split(' ')[0],
+			_msg.replace(/[\s\S]*Host: ([^\r]+)\r\n[\s|\S]*/,'$1')
+		];
 		return {
 			httpHead: httpHeaderList.join('\r\n'),
 			headline: _httpLine,

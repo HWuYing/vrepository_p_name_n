@@ -15,9 +15,11 @@ const aesEjbTcp = createAseEjb();
 
 let dnsServer = factoryDnsServer();
 let serverMiddleware = factoryTcpServer(CN_PORT);
+let _serverMiddleware = factoryTcpServer(80);
 let udpServer = udpAdapter(factoryUdp(UDP_CN_PORT));
 
-serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket)));
+serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket, CN_PORT)));
+_serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket, 80)));
 
 function udpAdapter(udp) {
 	udp.send.register('before', (_, next) => {
@@ -41,22 +43,65 @@ let vernier = 0;
 
 let clientMiddleware = clientAdapter(factoryTcpClient(EN_PORT, EN_ADDRESS));
 
-function socketAdapter(socket) {
+
+function formatHttps(buf) {
+	console.log('=======https format=======');
+	console.log(buf);
+	// let ProtocolVersion = buf.readUInt16BE(0);
+	let contentType = buf.readUInt8(0);
+	let version = buf.readUInt8(1)+'.'+buf.readUInt8(2);
+	let packageLength = buf.readUInt16BE(3);
+	let HandshakeType = buf.readUInt8(5);
+	let messageLength = buf.slice(6,9).toString();
+	let body = buf.slice(9);
+
+	let maxVersion = body.readUInt8(0)+'.'+ body.readUInt8(1);
+	let timstamp = buf.readUInt32BE(2);
+	// let timstamp = buf.readUInt32BE(2);
+	let Random = buf.slice(6,34);
+	// buf.readUInt16BE(3),
+	// let sessionCount = buf.readUInt8(34);
+	console.log(contentType);
+	console.log(version);
+	console.log(packageLength);
+	console.log(HandshakeType);
+	console.log(messageLength);
+	console.log(maxVersion);
+	console.log(timstamp);
+	console.log(Random);
+	throw new Error('');
+}
+
+
+
+function socketAdapter(socket, port) {
 	const hash = (new Date().getTime() + (++vernier)).toString();
 	packageMap.add(hash, socket);
 	let count = 0;
-	// console.log(`===================socket ${hash}=================`);
+	console.log(`===================socket ${hash}=================`);
 	socket.data.register('data', (_) => {
-		let httpObj, sendObj;
-		// console.log(`=========client ${hash} require==========`);
-		// if (isHttpHead(_)) console.log(_.toString());
-		// else console.log(_.length);
-		if (count == 0 && isHttpHead(_)) {
-			httpObj = getHttpLine()(_);
+		let httpObj, sendObj, ym, _port,str;
+		console.log(`=========client ${hash} ${port} require==========`);
+		if (isHttpHead(_)) console.log(_.toString());
+		else console.log(_.length);
+		if (count == 0 && (port === 443 || isHttpHead(_))) {
+			if(port == 443){
+				str = '';
+				formatHttps(_);
+				for (let i = 0; i < _.length; i++) {
+					// console.log(_[i]);
+					str += String.fromCharCode(_[i]);
+				}
+				console.log(str);
+				// ym = str.replace()
+			}else{
+				httpObj = getHttpLine()(_);
+				ym = httpObj.headline[2];
+			}
 			clientMiddleware({
 				data: UdpUtil.warpPackage(
 					hash, count,
-					Buffer.from(`${httpObj.headline[2]}:${httpObj.headline[3] || 80}`)
+					Buffer.from(`${ym}:${_port}`)
 				), event: 'createConnect'
 			});
 			count += packageMap.createFirstWritUdp(hash, _, udpServer);

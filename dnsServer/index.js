@@ -1,6 +1,7 @@
 const factoryUdp = require('./../tunnel/udp');
 const factoryTcp = require('./../tunnel/tcp_server');
 const parseFromBuffer = require('./parseFromBuffer');
+const parsetDns = require('./../dns');
 
 const structure = {
 	HEADER: {
@@ -68,6 +69,7 @@ const structure = {
 	}
 };
 
+let domainConfig;
 
 function readAnswerPackage(buf, offset) { //{{{
 	var ttl, len, rdata;
@@ -121,9 +123,9 @@ function factoryReadPackage(buf, callback) {
 			klass = buf.readUInt16BE(offset);
 			offset += 2;
 			info = {
-				name:info.name,
-				type:type,
-				klass:klass
+				name: info.name,
+				type: type,
+				klass: klass
 			};
 			if (callback && typeof callback == 'function') {
 				_info = callback(buf, offset);
@@ -167,32 +169,205 @@ function _parseFromBuffer(buf) {
 	body.queries = info.data;
 	offset = info.next;
 
-	info = factoryReadPackage(buf,readAnswerPackage)(offset, ancount);
+	info = factoryReadPackage(buf, readAnswerPackage)(offset, ancount);
 	body.answers = info.data;
 	offset = info.next;
 
-	info = factoryReadPackage(buf,readAnswerPackage)(offset, nscount);
+	info = factoryReadPackage(buf, readAnswerPackage)(offset, nscount);
 	body.authoritativeNameservers = info.data;
 	offset = info.next;
 
-	info = factoryReadPackage(buf,readAnswerPackage)(offset, arcount);
+	info = factoryReadPackage(buf, readAnswerPackage)(offset, arcount);
 	body.additionalRecords = info.data;
 	return query;
 }
 
-function onData(_, next) {
-	next(_.msg);
+function encodeAddress(address) { // {{{
+	let i, buf = Buffer.alloc(4);
+	address = address.split(".");
+	if (address.length < 4) return false;
+
+	for (i = 0; i < 4; i++) {
+		buf[i] = parseInt(address[i]);
+	}
+	return buf.toString("base64", 0, 4);
 }
 
-module.exports = exports = function () {
+function factoryFindDomain(queries) {
+	const answers = [];
+	const _quesies = queries.filter((domain) => (domain.type === 1 || domain.type == 28) && domain.klass === 1);
+	let vernier = 0;
+	let rdata;
+	console.log(queries);
+	return () => {
+		return new Promise((resolve, reject) => {
+			_quesies.forEach((domain) => {
+				console.log(domain);
+				["127.0.0.1"].forEach(address => answers.push({
+					name: domain.name,
+					type: 1,
+					klass: 1,
+					ttl: 0,
+					rdata: encodeAddress(address)
+				}));
+				++vernier && vernier == _quesies.length && resolve(answers);
+				// parsetDns(domain.name).then(addresses => {
+				// 	console.log(domain);
+				// 	addresses.forEach(address => {
+				// 		if (rdata = encodeAddress(address)) answers.push({
+				// 			name: domain.name,
+				// 			type: 1,
+				// 			klass: 1,
+				// 			ttl: 0,
+				// 			rdata: rdata
+				// 		});
+				// 	});
+				// 	++vernier && vernier == _quesies.length && resolve(answers);
+				// }).catch(e => {
+				// 	console.log(e)
+				// })
+			});
+		});
+	};
+}
+
+let domainMap = {};
+
+function writeDomainName(buf, name, offset) {
+	let items, length, index, item, len;
+	if (domainMap.hasOwnProperty(name)) {
+		index = domainMap[name];
+		buf.writeUInt8(0xc0 | ((index >> 8) & (~0xc0)), offset);
+		offset += 1;
+
+		buf.writeUInt8(index & 0xFF, offset);
+		offset += 1;
+	} else {
+		domainMap[name] = offset;
+		items = name.split(".");
+		length = items.length;
+		for (index = 0; index < length; index++) {
+			item = items[index];
+
+			offset += 1;
+			len = buf.write(item, offset, 'ascii');
+			buf.writeUInt8(len, offset - 1);
+			offset += len;
+		}
+		buf.writeUInt8(0, offset);
+		offset++;
+	}
+	return offset;
+}
+
+function writeQueryPackage(buf, pkg, offset) {
+	offset = writeDomainName(buf, pkg.name, offset);
+
+	buf.writeUInt16BE(pkg.type, offset);
+	offset += 2;
+
+	buf.writeUInt16BE(pkg.klass, offset);
+	offset += 2;
+
+	return offset;
+}
+
+function writeAnswerPackage(buf, pkg, offset) {
+	let length;
+	offset = writeQueryPackage(buf, pkg, offset);
+
+	buf.writeUInt32BE(pkg.ttl, offset);
+	offset += 4;
+
+	offset += 2;
+	length = buf.write(pkg.rdata, offset, "base64");
+	buf.writeUInt16BE(length, offset - 2);
+	offset += length;
+
+	return offset;
+}
+
+function writePackages(buf, packages, offset, callback) {
+	var length = packages.length,
+		index, pkg;
+	for (index = 0; index < length; index++) {
+		pkg = packages[index];
+		offset = callback(buf, pkg, offset);
+	}
+	return offset;
+}
+
+function factoryParseResponseBuffer(response) {
+	// const headerBuf = Buffer.alloc(12);
+	// const bodyBuf = Buffer.alloc(1000);
+	const header = response.header;
+	const buf = Buffer.alloc(1024);
+	const body = response.body;
+	let offset = 0;
+	return () => {
+		buf.writeUInt16BE(header.id, 0);
+		buf.writeUInt16BE(header.flags, 2);
+		buf.writeUInt16BE(header.qdcount, 4);
+		buf.writeUInt16BE(header.ancount, 6);
+		buf.writeUInt16BE(header.nscount, 8);
+		buf.writeUInt16BE(header.arcount, 10);
+		offset = 12;
+		offset = writePackages(buf, body.queries, offset, writeQueryPackage);
+		offset = writePackages(buf, body.answers, offset, writeAnswerPackage);
+		offset = writePackages(buf, body.authoritativeNameservers || [], offset, writeAnswerPackage);
+		offset = writePackages(buf, body.additionalRecords || [], offset, writeAnswerPackage);
+		domainMap = {};
+		return buf;
+	};
+}
+
+function parseResphonse(q) {
+	let response = {};
+	let header = response.header = {};
+	let body = response.body = {};
+	let qHeader = q.header;
+	let qBody = q.body;
+	header.id = qHeader.id;
+	header.qr = 1;
+	header.opcode = 0;
+	header.aa = 0;
+	header.tc = 0;
+	header.rd = 1;
+	header.ra = 0;
+	header.z = 0;
+	header.rcode = 0;
+	header.flags = header.qr << 15 | header.opcode << 11 |
+		header.aa << 10 | header.tc << 9 | header.rd << 8 | header.ra << 7 | header.z << 4 | response.rcode;
+	header.qdcount = qBody.queries.length;
+	header.nscount = 0;
+	header.arcount = 0;
+	body.queries = qBody.queries;
+	return factoryFindDomain(qBody.queries)().then((answers) => {
+		header.ancount = answers.length;
+		body.answers = answers;
+		return response;
+	});
+}
+
+
+module.exports = exports = function (_domainConfig) {
+	domainConfig = _domainConfig || {};
+
 	function udpAdapter(udp) {
 		udp.send.register('before', (_, next) => {
-			console.log(_);
+			next(_);
 		});
-		udp.message.register('before', onData)
 		udp.message.register('message', (_) => {
-			let q = _parseFromBuffer(_);
-			console.log(q);
+			let q = _parseFromBuffer(_.msg);
+			parseResphonse(q).then(response => {
+				return factoryParseResponseBuffer(response)();
+			}).then(buf => {
+				udp.send({
+					address: _.info.address,
+					port: _.info.port,
+					msg: [buf]
+				});
+			});
 		});
 		return udp;
 	}

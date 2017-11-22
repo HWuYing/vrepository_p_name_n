@@ -191,7 +191,7 @@ var createResponse = function(query) {
 
 var domainToQname = function(domain) {
 	var tokens = domain.split(".");
-	len = domain.length + 2;
+	var len = domain.length + 2;
 	var qname = new Buffer(len);
 	var offset = 0;
 	for(var i=0; i<tokens.length;i++) {
@@ -367,6 +367,7 @@ var findRecords = function(qname, qtype, qclass) {
 	if (qtype === '*') {
 		throw new Error('Wildcard not support');
 	} else {
+		console.log(domain);
 		var rr = records[domain][qclass][qtype];
 	}
 
@@ -407,6 +408,9 @@ records = {};
 records['tomhughescroucher.com'] = {};
 records['tomhughescroucher.com']['in'] = {};
 records['tomhughescroucher.com']['in']['a'] = [];
+records['mail.keruyun.com'] = {};
+records['mail.keruyun.com']['in'] = {};
+records['mail.keruyun.com']['in']['a'] = ['127.0.0.1'];
 
 var r = {};
 r.qname = domainToQname('tomhughescroucher.com');
