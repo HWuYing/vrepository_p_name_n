@@ -46,7 +46,7 @@ function socketAdapter(socket, port) {
 	const hash = (new Date().getTime() + (++vernier)).toString();
 	packageMap.add(hash, socket);
 	let count = 0;
-	// console.log(`===================socket ${hash}=================`);
+	console.log(`===================socket ${hash}=================`);
 	socket.data.register('data', (_) => {
 		let httpObj, sendObj, ym, _port,str;
 		// console.log(`=========client ${hash} ${port} require==========`);
@@ -58,6 +58,7 @@ function socketAdapter(socket, port) {
 				httpObj = getHttpLine()(_);
 				ym = httpObj.headline[2];
 			}
+			console.log(ym);
 			clientMiddleware({
 				data: UdpUtil.warpPackage(
 					hash, count,
