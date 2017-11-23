@@ -1,7 +1,6 @@
 const factoryUdp = require('./../tunnel/udp');
-const factoryTcp = require('./../tunnel/tcp_server');
-const parseFromBuffer = require('./parseFromBuffer');
 const parsetDns = require('./../dns');
+const proxyDomain = require('./proxyConfigSystemDomain');
 
 const structure = {
 	HEADER: {
@@ -193,39 +192,37 @@ function encodeAddress(address) { // {{{
 	return buf.toString("base64", 0, 4);
 }
 
+function pushAnswers(domain, addresses, answers) {
+	let rdata;
+	if (rdata = encodeAddress(addresses)) answers.push({
+		name: domain.name,
+		type: 1,
+		klass: 1,
+		ttl: 0,
+		rdata: rdata
+	});
+}
+
 function factoryFindDomain(queries) {
 	const answers = [];
 	const _quesies = queries.filter((domain) => (domain.type === 1 || domain.type == 28) && domain.klass === 1);
 	let vernier = 0;
-	let rdata;
-	console.log(queries);
+	function addVernier(resolve) {
+		++vernier && vernier == _quesies.length && resolve(answers);
+	}
 	return () => {
 		return new Promise((resolve, reject) => {
+			let addresses;
 			_quesies.forEach((domain) => {
-				console.log(domain);
-				["172.16.10.126"].forEach(address => answers.push({
-					name: domain.name,
-					type: 1,
-					klass: 1,
-					ttl: 0,
-					rdata: encodeAddress(address)
-				}));
-				++vernier && vernier == _quesies.length && resolve(answers);
-				// parsetDns(domain.name).then(addresses => {
-				// 	console.log(domain);
-				// 	addresses.forEach(address => {
-				// 		if (rdata = encodeAddress(address)) answers.push({
-				// 			name: domain.name,
-				// 			type: 1,
-				// 			klass: 1,
-				// 			ttl: 0,
-				// 			rdata: rdata
-				// 		});
-				// 	});
-				// 	++vernier && vernier == _quesies.length && resolve(answers);
-				// }).catch(e => {
-				// 	console.log(e)
-				// })
+				if (addresses = proxyDomain(domain.name)) {
+					pushAnswers(domain, addresses, answers);
+					addVernier(resolve);
+				}else parsetDns(domain.name).then(addresses => {
+					addresses.forEach(address => pushAnswers(domain, address, answers));
+					addVernier(resolve);
+				}).catch(e => {
+					pushAnswers(domain, '127.0.0.1', answers);
+				});
 			});
 		});
 	};
@@ -348,7 +345,6 @@ function parseResphonse(q) {
 		return response;
 	});
 }
-
 
 module.exports = exports = function (_domainConfig) {
 	domainConfig = _domainConfig || {};
