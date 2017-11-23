@@ -1,4 +1,5 @@
 const net = require('net');
+
 function factoryMiddleware(action) {
 	let middlewareCatch = [];
 	let middlewareVernier = {};
@@ -111,12 +112,11 @@ function getHttpLine() {
 			`([A-Z]+)\\s+${method === 'CONNECT' ? '' : 'http:\\/\\/'}([^:|^\\/]+):*([^\\/^\\s]*)([^\\?]*)(\\?*[^\\s]*)\\s*(HTTP\\/\\d+.\\d+)`
 		);
 		_httpLine = httpHeaderList[0].match(_httpLine);
-		console.log(_msg);
 		if (_httpLine) httpHeaderList[0] = `${_httpLine[1]} ${_httpLine[4]}${_httpLine[5]} ${_httpLine[6]}`.replace(/\s{2,}/g, ' ');
 		else _httpLine = [
 			httpHeaderList[0],
 			httpHeaderList[0].split(' ')[0],
-			_msg.replace(/[\s\S]*Host: ([^\r]+)\r\n[\s|\S]*/,'$1')
+			_msg.replace(/[\s\S]*Host: ([^\r]+)\r\n[\s|\S]*/, '$1')
 		];
 		return {
 			httpHead: httpHeaderList.join('\r\n'),
@@ -135,6 +135,105 @@ function getHttpLine() {
 			buf: Buffer.concat([headBuffer, body], headBuffer.length + body.length),
 			body: body
 		});
+	}
+}
+
+function parseSslAndTslClientHello() {
+	function recordLayer(buf) {
+		return {
+			header: {
+				contentType: buf.readUInt8(0),
+				TLSVersion: buf.readUInt8(1) + '.' + buf.readUInt8(2),
+				packageLength: buf.readUInt16BE(3)
+			},
+			body: buf.slice(5)
+		}
+	}
+
+	function getHostName(buf, obj) {
+		if (!obj.hasOwnProperty('0')) obj['0'] = {};
+		let nameList = buf.readUInt16BE(0);
+		let nameType = buf.readUInt8(2);
+		let nameLength = buf.readUInt16BE(3);
+		let serverName = buf.slice(5);
+		obj['0'] = {
+			nameList,
+			nameType,
+			nameLength,
+			buf: serverName
+		}
+	}
+
+	function switchType(type, buf, obj) {
+		switch (type) {
+			case 0:
+				getHostName(buf, obj);
+				break;
+		}
+	}
+
+	function parseExtensions(buf, length) {
+		let offset = 0, obj = {};
+		let type, _length;
+		while (offset < length) {
+			type = buf.readUInt16BE(offset);
+			offset += 2;
+			_length = buf.readUInt16BE(offset);
+			offset += 2;
+			switchType(type, buf.slice(offset, offset += _length), obj);
+		}
+		return obj;
+	}
+
+	function parseContent(buf) {
+		let offset = 0;
+		let sessionLen = buf.readUInt8(offset);
+		offset += 1;
+		let session = buf.slice(offset, offset += sessionLen);
+		let suitesLength = buf.readUInt16BE(offset);
+		offset += 2;
+		let suites = buf.slice(offset, offset += suitesLength);
+		let methodsLength = buf.readUInt8(offset);
+		offset += 1;
+		let methods = buf.slice(offset, offset += methodsLength);
+		let extensionsLength = buf.readUInt16BE(offset);
+		offset += 2;
+		let extensions = buf.slice(offset, offset += extensionsLength)
+		extensions = parseExtensions(extensions, extensionsLength);
+		return {
+			session,
+			suites,
+			methods,
+			extensions
+		}
+	}
+
+	function parseBody(buf) {
+		const HandshakeType = buf.readUInt8(0); // 0 代表clientHello 1个字节
+		const MessageLength = buf.readUInt16BE(1) << 8 | buf.readUInt8(3); // 消息长度 3个字节
+		const version = buf.readUInt8(4) + '.' + buf.readUInt8(5);
+		const timstanmp = buf.readUInt32BE(6);
+		const random = buf.slice(9, 37);
+		const content = parseContent(buf.slice(38));
+		return {
+			header: {
+				HandshakeType,
+				MessageLength,
+				version,
+				timstanmp,
+				random,
+			},
+			content
+		}
+	}
+
+	return function (buf) {
+		let {header, body} = recordLayer(buf);
+		body = parseBody(body);
+		return {
+			header,
+			body: Object.assign({}, body, {hostname: body.content.extensions[0].buf.toString()})
+		}
 	}
 }
 
@@ -214,5 +313,6 @@ module.exports = {
 	createProxyServer,
 	isHttpHead,
 	packageManage: packageManage(),
+	parseSslAndTslClientHello: parseSslAndTslClientHello(),
 	factoryMiddleware
 };

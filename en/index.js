@@ -130,6 +130,12 @@ function clientAdapter(client, socket, msg) {
 		clientMap.error(msg.hash.toString());
 		socket.write(TcpUtil.warpEventPackage('error', msg.hash, msg.count));
 	});
+	client.timeout.register('timeout', (e) => {
+		console.log(`====================server ${dataCount} timeout============`);
+		console.log(msg.hash);
+		console.log(e.message);
+		socket.write(TcpUtil.warpEventPackage('error', msg.hash, msg.count));
+	});
 	client.end.register('end', (_msg) => {
 		// console.log(`===============server ${msg.hash} end==============`);
 		// console.log(dataCount);

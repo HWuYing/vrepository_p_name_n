@@ -203,7 +203,7 @@ function factoryFindDomain(queries) {
 		return new Promise((resolve, reject) => {
 			_quesies.forEach((domain) => {
 				console.log(domain);
-				["127.0.0.1"].forEach(address => answers.push({
+				["172.16.10.126"].forEach(address => answers.push({
 					name: domain.name,
 					type: 1,
 					klass: 1,

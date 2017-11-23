@@ -1,6 +1,6 @@
 const {CN_PORT, EN_PORT, EN_ADDRESS, UDP_CN_PORT, UDP_EN_ADDRESS, UDP_EN_PORT} = require('../config');
 const createAseEjb = require('./../aes_ejb');
-const {isHttpHead, getHttpLine} = require('./../utils');
+const {isHttpHead, getHttpLine, parseSslAndTslClientHello} = require('./../utils');
 
 const factoryDnsServer = require('./../dnsServer');
 const factoryTcpServer = require('./../tunnel/tcp_server');
@@ -40,68 +40,28 @@ function udpAdapter(udp) {
 }
 
 let vernier = 0;
-
 let clientMiddleware = clientAdapter(factoryTcpClient(EN_PORT, EN_ADDRESS));
-
-
-function formatHttps(buf) {
-	console.log('=======https format=======');
-	console.log(buf);
-	// let ProtocolVersion = buf.readUInt16BE(0);
-	let contentType = buf.readUInt8(0);
-	let version = buf.readUInt8(1)+'.'+buf.readUInt8(2);
-	let packageLength = buf.readUInt16BE(3);
-	let HandshakeType = buf.readUInt8(5);
-	let messageLength = buf.slice(6,9).toString();
-	let body = buf.slice(9);
-
-	let maxVersion = body.readUInt8(0)+'.'+ body.readUInt8(1);
-	let timstamp = buf.readUInt32BE(2);
-	// let timstamp = buf.readUInt32BE(2);
-	let Random = buf.slice(6,34);
-	// buf.readUInt16BE(3),
-	// let sessionCount = buf.readUInt8(34);
-	console.log(contentType);
-	console.log(version);
-	console.log(packageLength);
-	console.log(HandshakeType);
-	console.log(messageLength);
-	console.log(maxVersion);
-	console.log(timstamp);
-	console.log(Random);
-	throw new Error('');
-}
-
-
 
 function socketAdapter(socket, port) {
 	const hash = (new Date().getTime() + (++vernier)).toString();
 	packageMap.add(hash, socket);
 	let count = 0;
-	console.log(`===================socket ${hash}=================`);
+	// console.log(`===================socket ${hash}=================`);
 	socket.data.register('data', (_) => {
 		let httpObj, sendObj, ym, _port,str;
-		console.log(`=========client ${hash} ${port} require==========`);
-		if (isHttpHead(_)) console.log(_.toString());
-		else console.log(_.length);
+		// console.log(`=========client ${hash} ${port} require==========`);
+		// if (isHttpHead(_)) console.log(_.toString());
+		// else console.log(_.length);
 		if (count == 0 && (port === 443 || isHttpHead(_))) {
-			if(port == 443){
-				str = '';
-				formatHttps(_);
-				for (let i = 0; i < _.length; i++) {
-					// console.log(_[i]);
-					str += String.fromCharCode(_[i]);
-				}
-				console.log(str);
-				// ym = str.replace()
-			}else{
+			if(port == 443) ym = parseSslAndTslClientHello(_).body.hostname;
+			else {
 				httpObj = getHttpLine()(_);
 				ym = httpObj.headline[2];
 			}
 			clientMiddleware({
 				data: UdpUtil.warpPackage(
 					hash, count,
-					Buffer.from(`${ym}:${_port}`)
+					Buffer.from(`${ym}:${port}`)
 				), event: 'createConnect'
 			});
 			count += packageMap.createFirstWritUdp(hash, _, udpServer);

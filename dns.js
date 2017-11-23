@@ -12,7 +12,6 @@ module.exports = exports = function (address,IPV6) {
 		resolveDns(address, (err, addresses) => {
 			if (err) return reject(err);
 			resolve(addresses);
-			// resolve(['127.0.0.1']);
 		});
 	})
 };
