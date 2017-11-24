@@ -1,4 +1,12 @@
-const {EN_PORT, countBufLen, UDP_CN_PORT, UDP_CN_ADDRESS, UDP_EN_PORT, CN_UDP_SERVERS_COUNT} = require('../config');
+const {
+	EN_PORT,
+	countBufLen,
+	UDP_CN_PORT,
+	UDP_CN_ADDRESS,
+	UDP_EN_PORT,
+	CN_UDP_SERVERS_COUNT,
+	EN_UDP_SERVERS_COUNT
+} = require('../config');
 const parsetDns = require('./../dns');
 const {getHttpLine, isHttpHead} = require('./../utils');
 
@@ -130,7 +138,7 @@ function clientAdapter(client, socket, msg) {
 	});
 
 	client.connect.register('connect', () => {
-		console.log(`=============server ${msg.hash} connect==================`);
+		// console.log(`=============server ${msg.hash} connect==================`);
 		clientMap.add(msg.hash.toString(), client);
 		socket.write(TcpUtil.warpEventPackage('connect', msg.hash, msg.count));
 	});
@@ -148,8 +156,8 @@ function clientAdapter(client, socket, msg) {
 		socket.write(TcpUtil.warpEventPackage('error', msg.hash, msg.count));
 	});
 	client.end.register('end', (_msg) => {
-		console.log(`===============server ${msg.hash} end==============`);
-		console.log(dataCount);
+		// console.log(`===============server ${msg.hash} end==============`);
+		// console.log(dataCount);
 		clientMap.end(msg.hash.toString(), dataCount);
 		client.ended = true;
 		let _datacount = Buffer.alloc(countBufLen, '');

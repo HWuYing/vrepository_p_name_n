@@ -1,4 +1,12 @@
-const {CN_PORT, EN_PORT, EN_ADDRESS, UDP_CN_PORT, UDP_EN_ADDRESS, UDP_EN_PORT, CN_UDP_SERVERS_COUNT} = require('../config');
+const {
+	CN_PORT, EN_PORT,
+	EN_ADDRESS,
+	UDP_CN_PORT,
+	UDP_EN_ADDRESS,
+	UDP_EN_PORT,
+	CN_UDP_SERVERS_COUNT,
+	EN_UDP_SERVERS_COUNT
+} = require('../config');
 const createAseEjb = require('./../aes_ejb');
 const {isHttpHead, getHttpLine, parseSslAndTslClientHello} = require('./../utils');
 
@@ -53,7 +61,7 @@ function socketAdapter(socket, port) {
 	const hash = (new Date().getTime() + (++vernier)).toString();
 	packageMap.add(hash, socket);
 	let count = 0;
-	console.log(`===================socket ${hash}=================`);
+	// console.log(`===================socket ${hash}=================`);
 	socket.data.register('data', (_) => {
 		let httpObj, sendObj, ym;
 		// console.log(`=========client ${hash} ${port} require==========`);
@@ -65,7 +73,7 @@ function socketAdapter(socket, port) {
 				httpObj = getHttpLine()(_);
 				ym = httpObj.headline[2];
 			}
-			console.log(ym);
+			// console.log(ym);
 			clientMiddleware({
 				data: UdpUtil.warpPackage(
 					hash, count,
@@ -132,6 +140,12 @@ function clientAdapter(client) {
 		if (event.indexOf('end') != -1) packageMap.end(hash, parseInt(data.toString()));
 		else if (event.indexOf('connect') != -1) packageMap.firstWriteUdp(hash);
 		else if (event.indexOf('error') != -1) packageMap.error(hash, data);
+	});
+
+	client.error.register('error', (e) => {
+		console.log(e.message);
+		client.end();
+		clientMiddleware = clientAdapter(factoryTcpClient(EN_PORT, EN_ADDRESS));
 	});
 
 	return client;
