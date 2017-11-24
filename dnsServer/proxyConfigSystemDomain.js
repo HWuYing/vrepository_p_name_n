@@ -1,7 +1,9 @@
 const domainProxy = {
 	'*.baidu.com': '172.16.10.126',
 	'*.bdstatic.com': '172.16.10.126',
-	'*.google.com': '172.16.10.126'
+	'*.google.com': '172.16.10.126',
+	'*.github.com': '172.16.10.126',
+	'github.com': '172.16.10.126',
 };
 module.exports = exports = function (domain) {
 	if (domain == 'localhost' || /^\d{3}\.\d{3}\.\d{3}\.\d{3}$/.test(domain)) return domain;

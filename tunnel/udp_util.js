@@ -135,7 +135,7 @@ class UdpUtil {
 
 	createJudgeDiscardPackage(vernier, obj) {
 		let si = setTimeout(() => {
-			if (vernier == obj.writeVernier) obj.socket.error(new Error('存在丢包'));
+			if (vernier == obj.writeVernier) obj.socket.error(new Error(`存在丢包 ${obj.writeVernier}`));
 		}, 3000);
 		return () => {
 			clearTimeout(si);
@@ -167,9 +167,10 @@ class UdpUtil {
 			} catch (e) {
 				console.log(`${e}`);
 			}
-			if (nextData = obj.writePackageList[++count] && nextData) this.write(key, count, nextData);
+
+			if (nextData = obj.writePackageList[obj.writeVernier]) this.write(key, obj.writeVernier, nextData);
 		} else this.writePushPackage(key, count, data);
-		if (obj.writeVernier + packageMaxDisparity < count && obj.judgeDiscardPackage) {
+		if (obj.writeVernier + packageMaxDisparity < count && !obj.judgeDiscardPackage) {
 			obj.judgeDiscardPackage = this.createJudgeDiscardPackage(obj.writeVernier, obj);
 		}
 	}

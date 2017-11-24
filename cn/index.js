@@ -1,4 +1,4 @@
-const {CN_PORT, EN_PORT, EN_ADDRESS, UDP_CN_PORT, UDP_EN_ADDRESS, UDP_EN_PORT} = require('../config');
+const {CN_PORT, EN_PORT, EN_ADDRESS, UDP_CN_PORT, UDP_EN_ADDRESS, UDP_EN_PORT, CN_UDP_SERVERS_COUNT} = require('../config');
 const createAseEjb = require('./../aes_ejb');
 const {isHttpHead, getHttpLine, parseSslAndTslClientHello} = require('./../utils');
 
@@ -13,10 +13,17 @@ const packageMap = new UdpUtil();
 const aesEjbUdp = createAseEjb();
 const aesEjbTcp = createAseEjb();
 
-let dnsServer = factoryDnsServer();
+factoryDnsServer();
 let serverMiddleware = factoryTcpServer(CN_PORT);
 let _serverMiddleware = factoryTcpServer(80);
-let udpServer = udpAdapter(factoryUdp(UDP_CN_PORT));
+
+// udp通信服务器列表
+let udpServerList = (function () {
+	let list = [];
+	for (let i = 0; i < CN_UDP_SERVERS_COUNT; i++) list.push(udpAdapter(factoryUdp(UDP_CN_PORT+i)));
+	return list;
+})();
+
 
 serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket, CN_PORT)));
 _serverMiddleware.connection.register('connection', (socket, next) => next(socketAdapter(socket, 80)));
@@ -48,12 +55,12 @@ function socketAdapter(socket, port) {
 	let count = 0;
 	console.log(`===================socket ${hash}=================`);
 	socket.data.register('data', (_) => {
-		let httpObj, sendObj, ym, _port,str;
+		let httpObj, sendObj, ym;
 		// console.log(`=========client ${hash} ${port} require==========`);
 		// if (isHttpHead(_)) console.log(_.toString());
 		// else console.log(_.length);
 		if (count == 0 && (port === 443 || isHttpHead(_))) {
-			if(port == 443) ym = parseSslAndTslClientHello(_).body.hostname;
+			if (port == 443) ym = parseSslAndTslClientHello(_).body.hostname;
 			else {
 				httpObj = getHttpLine()(_);
 				ym = httpObj.headline[2];
@@ -65,7 +72,7 @@ function socketAdapter(socket, port) {
 					Buffer.from(`${ym}:${port}`)
 				), event: 'createConnect'
 			});
-			count += packageMap.createFirstWritUdp(hash, _, udpServer);
+			count += packageMap.createFirstWritUdp(hash, _, udpServerList[0]);
 		} else {
 			sendObj = {hash, count, data: _};
 			clientMiddleware.writeUdp(sendObj);
@@ -113,7 +120,7 @@ function clientAdapter(client) {
 	client.writeUdp.register('writeUdp', (_) => {
 		// console.log(`===========data ${_.hash} ${_.count}=================`);
 		// console.log(_.buf.length);
-		udpServer(_.buf)
+		udpServerList[0](_.buf)
 	});
 
 	client.data.register('before', (_, next) => {

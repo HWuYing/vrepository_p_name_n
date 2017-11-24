@@ -1,4 +1,4 @@
-const {EN_PORT, countBufLen, UDP_CN_PORT, UDP_CN_ADDRESS, UDP_EN_PORT} = require('../config');
+const {EN_PORT, countBufLen, UDP_CN_PORT, UDP_CN_ADDRESS, UDP_EN_PORT, CN_UDP_SERVERS_COUNT} = require('../config');
 const parsetDns = require('./../dns');
 const {getHttpLine, isHttpHead} = require('./../utils');
 
@@ -13,11 +13,38 @@ const factoryUdp = require('./../tunnel/udp');
 const UdpUtil = require('./../tunnel/udp_util');
 const TcpUtil = require('./../tunnel/tcp_util');
 
-
+//udp工具
 const clientMap = new UdpUtil();
 
-let udpServer = udpAdapter(factoryUdp(UDP_EN_PORT));
+//udp服务器事件处理函数
+const udpAdapter = (function() {
+	let CN_UDP_PORT_LIST = [],currentPortIndex = 0;
+	for (let i = 0; i < CN_UDP_SERVERS_COUNT; i++) {
+		CN_UDP_PORT_LIST.push(UDP_CN_PORT+i);
+	}
+	return function (udp) {
+		udp.send.register('before', (_, next) => {
+			let port = CN_UDP_PORT_LIST[currentPortIndex];
+			next({
+				msg: aesEjbUdp.encryption(_),
+				port: port,
+				address: UDP_CN_ADDRESS
+			});
+			if(currentPortIndex < CN_UDP_SERVERS_COUNT - 1)  currentPortIndex++;
+			else currentPortIndex = 0;
+		});
 
+		udp.message.register('message', (_) => {
+			let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
+			// console.log(`============udpMessage ${hash} ${count}===================`);
+			// console.log(data.length);
+			clientMap.write(hash, count, data);
+		});
+		return udp;
+	}
+})();
+// udp服务器
+let udpServer = udpAdapter(factoryUdp(UDP_EN_PORT));
 /**
  * tcp服务器
  * @param socket
@@ -26,23 +53,6 @@ let serverMiddleware = factoryTcpServer(EN_PORT);
 serverMiddleware.connection.register('connection', (socket, next) => {
 	next(socketAdapter(socket));
 });
-
-function udpAdapter(udp) {
-	udp.send.register('before', (_, next) => next({
-		msg: aesEjbUdp.encryption(_),
-		port: UDP_CN_PORT,
-		address: UDP_CN_ADDRESS
-	}));
-
-	udp.message.register('message', (_) => {
-		let {hash, count, data} = UdpUtil.decomPackage(aesEjbUdp.decryption(_.msg));
-		// console.log(`============udpMessage ${hash} ${count}===================`);
-		// console.log(data.length);
-		clientMap.write(hash, count, data);
-	});
-
-	return udp;
-}
 
 function socketAdapter(socket) {
 	socket.data.register('before', (_, next) => {
@@ -88,6 +98,7 @@ function socketAdapter(socket) {
  * @param client
  * @param socket
  */
+
 function clientAdapter(client, socket, msg) {
 	let dataCount = 0;
 	client.write.register('before', (_, next) => {
@@ -119,7 +130,7 @@ function clientAdapter(client, socket, msg) {
 	});
 
 	client.connect.register('connect', () => {
-		// console.log(`=============server ${msg.hash} connect==================`);
+		console.log(`=============server ${msg.hash} connect==================`);
 		clientMap.add(msg.hash.toString(), client);
 		socket.write(TcpUtil.warpEventPackage('connect', msg.hash, msg.count));
 	});
@@ -137,8 +148,8 @@ function clientAdapter(client, socket, msg) {
 		socket.write(TcpUtil.warpEventPackage('error', msg.hash, msg.count));
 	});
 	client.end.register('end', (_msg) => {
-		// console.log(`===============server ${msg.hash} end==============`);
-		// console.log(dataCount);
+		console.log(`===============server ${msg.hash} end==============`);
+		console.log(dataCount);
 		clientMap.end(msg.hash.toString(), dataCount);
 		client.ended = true;
 		let _datacount = Buffer.alloc(countBufLen, '');

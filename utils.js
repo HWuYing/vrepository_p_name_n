@@ -116,7 +116,7 @@ function getHttpLine() {
 		else _httpLine = [
 			httpHeaderList[0],
 			httpHeaderList[0].split(' ')[0],
-			_msg.replace(/[\s\S]*Host: ([^\r]+)\r\n[\s|\S]*/, '$1')
+			_msg.replace(/[\s\S]*[H|h]ost: ([^\r]+)\r\n[\s|\S]*/, '$1')
 		];
 		return {
 			httpHead: httpHeaderList.join('\r\n'),
