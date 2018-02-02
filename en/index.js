@@ -119,8 +119,7 @@ function clientAdapter(client, socket, msg) {
 			} else {
 				next(httpObj.buf);
 			}
-		}
-		else {
+		}else {
 			next(_);
 		}
 	});

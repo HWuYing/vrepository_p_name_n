@@ -145,7 +145,9 @@ function clientAdapter(client) {
 	client.error.register('error', (e) => {
 		console.log(e.message);
 		client.end();
-		clientMiddleware = clientAdapter(factoryTcpClient(EN_PORT, EN_ADDRESS));
+		setTimeout(() =>{
+			clientMiddleware = clientAdapter(factoryTcpClient(EN_PORT, EN_ADDRESS));
+		},10000);
 	});
 
 	return client;
